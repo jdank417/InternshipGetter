@@ -3,63 +3,55 @@ import requests
 import spacy
 import logging
 import pandas as pd
-from openpyxl import Workbook, load_workbook
-from openpyxl.utils import get_column_letter
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Excel file setup
-EXCEL_FILE = 'internshipGetter.xlsx'
+# Google Sheets setup
+SERVICE_ACCOUNT_FILE = 'internshipgettersheets-eb1c49f87f8e.json'
+SPREADSHEET_ID = '1dM45MfAPinEGYJlFy-UwXqrZ7GtSdvIl2z2YGxAcF_E'
 SHEET_NAME = 'Sheet1'
 
-def initialize_excel_sheet(excel_file, sheet_name):
-    try:
-        wb = load_workbook(excel_file)
-        if sheet_name not in wb.sheetnames:
-            ws = wb.create_sheet(title=sheet_name)
-            ws.append(['Title', 'Link'])  # Add headers
-            wb.save(excel_file)
-            logging.info(f"Created new sheet with headers.")
-    except FileNotFoundError:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = sheet_name
-        ws.append(['Title', 'Link'])  # Add headers
-        wb.save(excel_file)
-        logging.info(f"Created new Excel file with headers.")
+# Setup Google Sheets API credentials
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+service = build('sheets', 'v4', credentials=credentials)
 
-def get_existing_jobs(excel_file, sheet_name):
-    df = pd.read_excel(excel_file, sheet_name=sheet_name)
-    if 'Title' not in df.columns:
-        raise KeyError("The 'Title' column is missing in the Excel sheet.")
-    return df['Title'].tolist()
 
-def add_job_to_excel(excel_file, sheet_name, job_title, job_link):
-    df = pd.read_excel(excel_file, sheet_name=sheet_name)
-    new_row = pd.DataFrame([[job_title, job_link]], columns=['Title', 'Link'])
-    df = pd.concat([df, new_row], ignore_index=True)
-    df.to_excel(excel_file, sheet_name=sheet_name, index=False)
-    logging.info(f"Added job to Excel: {job_title}")
-    autosize_columns(excel_file, sheet_name)
+def initialize_google_sheet(spreadsheet_id, sheet_name):
+    sheet_metadata = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheets = sheet_metadata.get('sheets', '')
 
-def autosize_columns(excel_file, sheet_name):
-    wb = load_workbook(excel_file)
-    ws = wb[sheet_name]
-    for col in ws.columns:
-        max_length = 0
-        column = col[0].column_letter  # Get the column name
-        for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(cell.value)
-            except:
-                pass
-        adjusted_width = (max_length + 2)
-        ws.column_dimensions[column].width = adjusted_width
-    wb.save(excel_file)
+    sheet_exists = any(sheet['properties']['title'] == sheet_name for sheet in sheets)
+    if not sheet_exists:
+        # Add the new sheet
+        body = {'requests': [{'addSheet': {'properties': {'title': sheet_name}}}]}
+        service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=body).execute()
+        # Add headers
+        header_values = [['Title', 'Link']]
+        body = {'values': header_values}
+        service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=sheet_name + '!A1',
+                                               valueInputOption='RAW', body=body).execute()
+        logging.info(f"Created new sheet with headers.")
+
+
+def get_existing_jobs(spreadsheet_id, sheet_name):
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A:A').execute()
+    values = result.get('values', [])
+    return [row[0] for row in values if row]
+
+
+def add_job_to_google_sheet(spreadsheet_id, sheet_name, job_title, job_link):
+    new_row = [[job_title, job_link]]
+    body = {'values': new_row}
+    service.spreadsheets().values().append(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A:B',
+                                           valueInputOption='RAW', body=body).execute()
+    logging.info(f"Added job to Google Sheet: {job_title}")
+
 
 # spaCy model setup
 try:
@@ -76,9 +68,11 @@ except FileNotFoundError:
     logging.error("Error: 'resume.txt' not found.")
     resume_text = ""
 
+
 def extract_keywords(text):
     doc = nlp(text.lower())  # Lowercase text to improve matching accuracy
     return [token.lemma_ for token in doc if token.is_alpha and not token.is_stop]
+
 
 def match_jobs_with_resume(job_descriptions, resume_text):
     if not resume_text:
@@ -102,7 +96,7 @@ def match_jobs_with_resume(job_descriptions, resume_text):
     return job_matches
 
 
-def search_internships(api_key, cse_id, query, location, resume_text, excel_file, sheet_name, num_results=10):
+def search_internships(api_key, cse_id, query, location, resume_text, spreadsheet_id, sheet_name, num_results=10):
     query_with_location = f"{query} in {location}"
     start_index = 1
     all_job_descriptions = []
@@ -133,12 +127,12 @@ def search_internships(api_key, cse_id, query, location, resume_text, excel_file
         logging.info("No job descriptions found.")
         return
 
-    existing_jobs = get_existing_jobs(excel_file, sheet_name)
+    existing_jobs = get_existing_jobs(spreadsheet_id, sheet_name)
     matched_jobs = match_jobs_with_resume(all_job_descriptions, resume_text)
 
     for score, job in matched_jobs:
         if job['title'] not in existing_jobs:
-            add_job_to_excel(excel_file, sheet_name, job['title'], job['link'])
+            add_job_to_google_sheet(spreadsheet_id, sheet_name, job['title'], job['link'])
             print(
                 f"Relevance: {score:.2f}\nTitle: {job['title']}\nLink: {job['link']}\nDescription: {job['description']}\n")
         else:
@@ -150,10 +144,10 @@ api_key = "AIzaSyBhMAy_EtBGOaTcVFi7pj1ad37pKjEGDqI"
 cse_id = "61fcd2bdd7a354817"
 query = "software engineering internship Spring 2025"
 location = "Boston, MA"
-excel_file = EXCEL_FILE
+spreadsheet_id = SPREADSHEET_ID
 sheet_name = SHEET_NAME
 
-# Initialize Excel file and sheet if necessary
-initialize_excel_sheet(excel_file, sheet_name)
+# Initialize Google Sheet if necessary
+initialize_google_sheet(spreadsheet_id, sheet_name)
 
-search_internships(api_key, cse_id, query, location, resume_text, excel_file, sheet_name, num_results=50)
+search_internships(api_key, cse_id, query, location, resume_text, spreadsheet_id, sheet_name, num_results=25)
