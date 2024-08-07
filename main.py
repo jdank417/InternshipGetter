@@ -4,6 +4,7 @@ import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Ensure the spaCy model is downloaded
 try:
     nlp = spacy.load('en_core_web_sm')
 except OSError:
@@ -78,12 +79,9 @@ Work Experience:
     * Responsibilities: Taught sailing to students aged 6-75, maintained US Sailing Level 1 certification, provided safe and reliable instruction, certified in CPR/AED/BLS and basic concussion diagnosis.
 """
 
-
-
 def extract_keywords(text):
     doc = nlp(text)
     return [token.lemma_ for token in doc if token.is_alpha and not token.is_stop]
-
 
 def match_jobs_with_resume(job_descriptions, resume_text):
     resume_keywords = extract_keywords(resume_text)
@@ -103,27 +101,24 @@ def match_jobs_with_resume(job_descriptions, resume_text):
     job_matches.sort(reverse=True, key=lambda x: x[0])
     return job_matches
 
-
-def search_internships(api_key, cse_id, query, resume_text):
-    url = f"https://www.googleapis.com/customsearch/v1?q={query}&key={api_key}&cx={cse_id}"
+def search_internships(api_key, cse_id, query, location, resume_text):
+    query_with_location = f"{query} in {location}"
+    url = f"https://www.googleapis.com/customsearch/v1?q={query_with_location}&key={api_key}&cx={cse_id}"
     response = requests.get(url)
     if response.status_code == 200:
         results = response.json().get('items', [])
-        job_descriptions = [{'title': item['title'], 'link': item['link'], 'description': item['snippet']} for item in
-                            results]
+        job_descriptions = [{'title': item['title'], 'link': item['link'], 'description': item['snippet']} for item in results]
 
         matched_jobs = match_jobs_with_resume(job_descriptions, resume_text)
 
         for score, job in matched_jobs:
-            print(
-                f"Relevance: {score:.2f}\nTitle: {job['title']}\nLink: {job['link']}\nDescription: {job['description']}\n")
+            print(f"Relevance: {score:.2f}\nTitle: {job['title']}\nLink: {job['link']}\nDescription: {job['description']}\n")
     else:
         print(f"Error: {response.status_code} - {response.text}")
 
-
-
 api_key = "AIzaSyCmDTs2lWUqNrQqRCEorKI1umwTdRpcAqM"
-cse_id = "61fcd2bdd7a354817"  # This should be just the CSE ID, not the full URL
+cse_id = "61fcd2bdd7a354817"
 query = "software engineering internship Spring 2025"
+location = "Boston, MA"
 
-search_internships(api_key, cse_id, query, resume_text)
+search_internships(api_key, cse_id, query, location, resume_text)
