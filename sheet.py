@@ -1,3 +1,4 @@
+import json
 import subprocess
 import requests
 import spacy
@@ -11,10 +12,17 @@ from googleapiclient.discovery import build
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Google Sheets setup
-SERVICE_ACCOUNT_FILE = 'internshipgettersheets-eb1c49f87f8e.json'
-SPREADSHEET_ID = '1dM45MfAPinEGYJlFy-UwXqrZ7GtSdvIl2z2YGxAcF_E'
-SHEET_NAME = 'Sheet1'
+# Load configuration
+with open('config.json') as config_file:
+    config = json.load(config_file)
+
+SERVICE_ACCOUNT_FILE = config['SERVICE_ACCOUNT_FILE']
+SPREADSHEET_ID = config['SPREADSHEET_ID']
+SHEET_NAME = config['SHEET_NAME']
+API_KEY = config['API_KEY']
+CSE_ID = config['CSE_ID']
+QUERY = config['QUERY']
+LOCATION = config['LOCATION']
 
 # Setup Google Sheets API credentials
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -139,15 +147,7 @@ def search_internships(api_key, cse_id, query, location, resume_text, spreadshee
             logging.info(f"Job already listed: {job['title']}")
 
 
-# Configuration
-api_key = "AIzaSyBhMAy_EtBGOaTcVFi7pj1ad37pKjEGDqI"
-cse_id = "61fcd2bdd7a354817"
-query = "software engineering internship Spring 2025"
-location = "Boston, MA"
-spreadsheet_id = SPREADSHEET_ID
-sheet_name = SHEET_NAME
-
 # Initialize Google Sheet if necessary
-initialize_google_sheet(spreadsheet_id, sheet_name)
+initialize_google_sheet(SPREADSHEET_ID, SHEET_NAME)
 
-search_internships(api_key, cse_id, query, location, resume_text, spreadsheet_id, sheet_name, num_results=50)
+search_internships(API_KEY, CSE_ID, QUERY, LOCATION, resume_text, SPREADSHEET_ID, SHEET_NAME, num_results=50)
