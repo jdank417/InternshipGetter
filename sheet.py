@@ -150,4 +150,4 @@ sheet_name = SHEET_NAME
 # Initialize Google Sheet if necessary
 initialize_google_sheet(spreadsheet_id, sheet_name)
 
-search_internships(api_key, cse_id, query, location, resume_text, spreadsheet_id, sheet_name, num_results=25)
+search_internships(api_key, cse_id, query, location, resume_text, spreadsheet_id, sheet_name, num_results=50)
