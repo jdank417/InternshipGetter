@@ -1,9 +1,10 @@
 import json
 import subprocess
+import sys
 import requests
 import spacy
 import logging
-import pandas as pd
+#import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from google.oauth2.service_account import Credentials
@@ -65,8 +66,9 @@ def add_job_to_google_sheet(spreadsheet_id, sheet_name, job_title, job_link):
 try:
     nlp = spacy.load('en_core_web_sm')
 except OSError:
-    subprocess.run(['python', '-m', 'spacy', 'download', 'en_core_web_sm'])
+    subprocess.run([sys.executable, '-m', 'spacy', 'download', 'en_core_web_sm'])
     nlp = spacy.load('en_core_web_sm')
+
 
 # Read resume content from file
 try:
